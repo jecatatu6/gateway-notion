@@ -1,0 +1,24 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")   // conexão com pooling (porta 6543 + ?pgbouncer=true)
+  directUrl  = env("DIRECT_URL")     // conexão direta (porta 5432), usada para migrações
+}
+
+generator client {
+  provider = "prisma-client-py"
+}
+
+model Subscription {
+  email      String   @id
+  jwt        String
+  status     Status   @default(ACTIVE)
+  expiresAt  DateTime
+  updatedAt  DateTime @updatedAt
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
