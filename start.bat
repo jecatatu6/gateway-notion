@@ -1,0 +1,3 @@
+@echo off
+echo Iniciando a aplicação FastAPI com uvicorn...
+uvicorn app:app --reload
