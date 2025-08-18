@@ -1,11 +1,11 @@
-version: "3.9"
+version: "3.8"
 
 services:
   gateway-notion:
-    build: .
-    container_name: gateway-notion
-    restart: always
+    image: gateway-notion:latest
     ports:
       - "8000:8000"
-    environment:
-      - ENV=production
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
