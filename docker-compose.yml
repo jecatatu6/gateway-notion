@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   app:
-    build: .
+    image: gateway-notion-app
     ports:
       - "9100:9001"
     configs:
