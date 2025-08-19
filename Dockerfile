@@ -1,8 +1,6 @@
 # Imagem base do Python
 FROM python:3.11-slim
 
-# Variáveis úteis (logs sem buffer e sem .pyc)
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
 # Diretório de trabalho
 WORKDIR /app
@@ -15,8 +13,6 @@ RUN python -m pip install --upgrade pip && \
 # Copia o restante do projeto
 COPY . .
 
-# Porta da API
-EXPOSE 8000
 
 # Comando para iniciar a FastAPI
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9001"]
