@@ -1,11 +1,35 @@
 version: "3.8"
 
 services:
-  gateway-notion:
-    image: gateway-notion:latest
+  app:
+    image: python:3.11
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ./gateway-notion.env:/app/.env
+    command: >
+      sh -c "
+        pip install --upgrade pip &&
+        pip install -r requirements.txt &&
+        uvicorn app:app --host 0.0.0.0 --port 9001
+      "
     ports:
-      - "8000:8000"
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
+      - "9001:9001"
+    networks:
+      - portainer
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    networks:
+      - portainer
+
+networks:
+  portainer:
+    external:
+      name: portainer
+
