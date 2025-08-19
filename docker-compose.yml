@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   app:
     image: python:3.11
@@ -7,18 +5,9 @@ services:
     volumes:
       - ./:/app
       - ./gateway-notion.env:/app/.env
-    command: >
-      sh -c "
-        pip install --upgrade pip &&
-        pip install -r requirements.txt &&
-        uvicorn app:app --host 0.0.0.0 --port 9001
-      "
+    command: ["sleep", "3600"]
     ports:
       - "9100:9001"
     networks:
       - portainer
 
-networks:
-  portainer:
-    external:
-      name: portainer
