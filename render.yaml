@@ -5,12 +5,31 @@ services:
     plan: free
     region: oregon
     autoDeploy: true
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+
+    # Gera o prisma-client-py e aplica migrações ANTES de subir o servidor
     preDeployCommand: |
       python -m prisma generate --schema=prisma/schema.prisma
       python migrate.py
+
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /docs
+
     envVars:
       - key: PYTHON_VERSION
         value: 3.11
+      # Configure estas no painel do Render (Dashboard → Environment):
+      # - DATABASE_URL
+      # - DIRECT_URL
+      # - JWT_SECRET
+      # - JWT_ISSUER
+      # - NOTION_URL
+      # - REDIRECT_HTTP_CODE
+      # - ALLOWED_EVENTS
+      # - WEBHOOK_VERIFY_SECRET
+      # - JWT_EXP_DAYS
+      # - ERROR_MESSAGE_EXPIRED
+      # - ERROR_MESSAGE_INVALID
