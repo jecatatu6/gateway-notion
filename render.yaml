@@ -6,7 +6,9 @@ services:
     region: oregon
     autoDeploy: true
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    preDeployCommand: python migrate.py
+    preDeployCommand: |
+      python -m prisma generate --schema=prisma/schema.prisma
+      python migrate.py
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /docs
     envVars:
