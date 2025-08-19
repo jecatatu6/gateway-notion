@@ -2,7 +2,10 @@ version: "3.8"
 
 services:
   app:
-    build: .
+    image: gateway-notion-app
+    build:
+      context: .
+      dockerfile: Dockerfile
     working_dir: /app
     ports:
       - "9100:9001"
