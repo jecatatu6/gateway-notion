@@ -18,18 +18,9 @@ services:
     networks:
       - portainer
 
-  pgadmin:
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
-    ports:
-      - "5051:80"
-    networks:
-      - portainer
-
 networks:
   portainer:
     external:
       name: portainer
+
 
