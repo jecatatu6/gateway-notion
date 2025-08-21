@@ -16,3 +16,9 @@ COPY . .
 
 # Comando para iniciar a FastAPI
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9001"]
+
+# Instala dependências
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Gera o Prisma Client dentro da imagem
+RUN python -m prisma generate --schema=prisma/schema.prisma
