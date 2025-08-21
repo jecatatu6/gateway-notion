@@ -18,3 +18,4 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
+      # As demais variáveis (JWT_SECRET, DATABASE_URL etc.) você configura no dashboard do Render
