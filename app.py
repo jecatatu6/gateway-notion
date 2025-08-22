@@ -6,6 +6,7 @@ from pydantic.networks import EmailStr
 import os, jwt, datetime, logging
 from dotenv import load_dotenv
 from prisma import Prisma
+import hmac, hashlib
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,20 +45,37 @@ async def health():
 # webhook Kiwify (versão mínima só para teste de caminho/assinatura)
 @app.post("/webhook/kiwify", tags=["webhook"])
 async def kiwify_webhook(request: Request):
-    secret_expected = os.getenv("WEBHOOK_VERIFY_SECRET", "")
-    # Kiwify pode enviar o token na query (?signature=) ou em header
-    token = (
+    secret_expected = (os.getenv("WEBHOOK_VERIFY_SECRET") or "").strip()
+
+    raw_body: bytes = await request.body()
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    # assinatura enviada pela Kiwify (query ou headers)
+    signature = (
         request.query_params.get("signature")
         or request.headers.get("X-Kiwify-Token")
         or request.headers.get("X-Webhook-Token")
         or request.headers.get("X-Signature")
-    )
-    if secret_expected and token != secret_expected:
+        or ""
+    ).strip().lower()
+
+    def match(sig: str, digest: str) -> bool:
+        return bool(sig) and hmac.compare_digest(sig, digest)
+
+    # calcule ambas as variantes
+    sha1  = hmac.new(secret_expected.encode(), raw_body, hashlib.sha1 ).hexdigest()
+    sha256 = hmac.new(secret_expected.encode(), raw_body, hashlib.sha256).hexdigest()
+
+    token_ok = secret_expected and signature == secret_expected.lower()
+    hmac_ok = match(signature, sha1) or match(signature, sha256)
+
+    if secret_expected and not (token_ok or hmac_ok):
         raise HTTPException(status_code=403, detail="invalid signature")
 
-    payload = await request.json()
-    # por enquanto só confirmamos recebimento; depois salvamos no banco
-    return {"received": True, "event": payload.get("event")}
+    return {"received": True, "verified": "token" if token_ok else ("hmac-sha1" if match(signature, sha1) else "hmac-sha256"), "event": payload.get("event")}
 
 # Modelos e rostas mantêm-se exatamente como estavam
 
