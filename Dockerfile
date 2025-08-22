@@ -1,5 +1,5 @@
 # Imagem base do Python
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Diretório de trabalho
 WORKDIR /app
@@ -13,7 +13,6 @@ RUN python -m pip install --upgrade pip && \
 COPY . .
 
 # Gera o Prisma Client dentro da imagem (antes do CMD)
-RUN python -m prisma generate --schema=prisma/schema.prisma
 
 # Comando para iniciar a FastAPI
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9001"]
