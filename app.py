@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse
 from prisma import Prisma
+from prisma.enums import Status as DBStatus  # << enum do Prisma (ACTIVE/INACTIVE)
 
 # -------------------------------------------------
 # Logging
@@ -153,14 +154,14 @@ def _parse_expires(payload: dict):
                 pass
     return None
 
-def _gen_jwt(email: str, status: str) -> str:
+def _gen_jwt(email: str, status_name: str) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": email,
         "iss": JWT_ISSUER,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(days=JWT_EXP_DAYS)).timestamp()),
-        "status": status,
+        "status": status_name,  # grava "ACTIVE"/"INACTIVE"
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
     return token.decode("utf-8") if isinstance(token, bytes) else token
@@ -221,32 +222,38 @@ async def kiwify_webhook(request: Request):
             status_code=200,
         )
 
-    # status e expiração
-    status = (
-        "ACTIVE" if any(s in event for s in ("renew", "created", "approved"))
-        else "INACTIVE" if "cancel" in event
-        else "UNKNOWN"
-    )
+    # status (enum) e expiração (obrigatória no seu schema)
+    # Regra: INACTIVE apenas se contiver "cancel" no nome do evento; caso contrário ACTIVE
+    status_value: DBStatus = DBStatus.INACTIVE if "cancel" in event.lower() else DBStatus.ACTIVE
     exp = _parse_expires(body) or (datetime.now(timezone.utc) + timedelta(days=JWT_EXP_DAYS))
 
-    # gera JWT
-    token = _gen_jwt(email, status)
+    # gera JWT (com string do enum)
+    token = _gen_jwt(email, status_value.name)
 
-    # upsert na tabela Subscription (colunas: email, jwt, status, expiresAt)
+    # upsert na tabela Subscription (email @id, jwt String, status Enum, expiresAt DateTime)
     try:
         await db.subscription.upsert(
             where={"email": email},
             data={
-                "create": {"email": email, "jwt": token, "status": status, "expiresAt": exp},
-                "update": {"jwt": token, "status": status, "expiresAt": exp},
+                "create": {
+                    "email": email,
+                    "jwt": token,
+                    "status": status_value,   # enum!
+                    "expiresAt": exp,
+                },
+                "update": {
+                    "jwt": token,
+                    "status": status_value,   # enum!
+                    "expiresAt": exp,
+                },
             },
         )
-        logger.info(f"[webhook] upsert ok email={email} status={status}")
+        logger.info(f"[webhook] upsert ok email={email} status={status_value.name}")
     except Exception:
         logger.exception("[webhook] upsert FAILED")
         raise HTTPException(status_code=500, detail="database error")
 
-    return {"ok": True, "event": event, "email": email, "jwt": token}
+    return {"ok": True, "event": event, "email": email, "status": status_value.name, "jwt": token}
 
 # -------------------------------------------------
 # Validação e redirecionamento
@@ -276,7 +283,9 @@ async def access(token: str):
         logger.exception("Erro ao consultar Subscription.")
         raise HTTPException(status_code=500, detail="Erro interno no servidor")
 
-    if not rec or rec.status != "ACTIVE" or getattr(rec, "jwt", None) != token:
+    # rec.status é um enum; compare com o enum ou com .name
+    is_active = (rec and (getattr(rec.status, "name", str(rec.status)) == "ACTIVE"))
+    if not rec or not is_active or getattr(rec, "jwt", None) != token:
         raise HTTPException(status_code=403, detail=ERR_INVALID)
 
     # redireciona
