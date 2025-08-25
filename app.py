@@ -35,14 +35,11 @@ JWT_SECRET = env("JWT_SECRET")
 JWT_ISSUER = env("JWT_ISSUER", "gateway-notion")
 NOTION_URL = env("NOTION_URL")
 REDIRECT_HTTP_CODE = int(env("REDIRECT_HTTP_CODE", "302"))
-ALLOWED_EVENTS = {
-    e.strip()
-    for e in env(
-        "ALLOWED_EVENTS",
-        "subscription.created,subscription.renewed,subscription.canceled",
-    ).split(",")
-    if e.strip()
-}
+
+# ⚠️ sem default: vazio => aceita todos os eventos
+ALLOWED_EVENTS_RAW = env("ALLOWED_EVENTS", "")
+ALLOWED_EVENTS = {e.strip() for e in ALLOWED_EVENTS_RAW.split(",") if e.strip()}
+
 WEBHOOK_VERIFY_SECRET = env("WEBHOOK_VERIFY_SECRET")
 JWT_EXP_DAYS = int(env("JWT_EXP_DAYS", "365"))
 ERR_EXPIRED = env("ERROR_MESSAGE_EXPIRED", "Sua assinatura expirou. Renove para continuar.")
@@ -149,6 +146,12 @@ async def kiwify_webhook(request: Request):
     except Exception:
         body = {}
 
+    # 🔎 log de diagnóstico para ver formato real do payload
+    try:
+        logger.info(f"[webhook] raw-keys={list(body.keys())} body={body}")
+    except Exception:
+        logger.info("[webhook] body log skipped (non-serializable)")
+
     # assinatura/token (query ou headers). A Kiwify costuma usar ?signature=
     signature = (
         request.query_params.get("signature")
@@ -175,7 +178,7 @@ async def kiwify_webhook(request: Request):
     email = _parse_email(body)
     logger.info(f"[webhook] event={event!r} email={email!r}")
 
-    # filtra eventos
+    # filtro de eventos: vazio => aceita todos
     if ALLOWED_EVENTS and event not in ALLOWED_EVENTS:
         return JSONResponse({"ok": True, "ignored": True, "event": event}, status_code=202)
 
