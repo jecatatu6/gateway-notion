@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import hmac
 import hashlib
 import jwt
@@ -36,7 +37,7 @@ JWT_ISSUER = env("JWT_ISSUER", "gateway-notion")
 NOTION_URL = env("NOTION_URL")
 REDIRECT_HTTP_CODE = int(env("REDIRECT_HTTP_CODE", "302"))
 
-# ⚠️ sem default: vazio => aceita todos os eventos
+# vazio => aceita todos os eventos (depois você pode restringir via env)
 ALLOWED_EVENTS_RAW = env("ALLOWED_EVENTS", "")
 ALLOWED_EVENTS = {e.strip() for e in ALLOWED_EVENTS_RAW.split(",") if e.strip()}
 
@@ -95,15 +96,45 @@ async def health():
 def _event_name(payload: dict) -> str:
     return payload.get("event") or payload.get("type") or payload.get("status") or "unknown"
 
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+def _find_email_anywhere(obj) -> str | None:
+    """Busca recursivamente qualquer chave que contenha 'email' e valide formato."""
+    if isinstance(obj, dict):
+        # muitos webhooks aninham dentro de "data"
+        if "data" in obj and isinstance(obj["data"], (dict, list)):
+            found = _find_email_anywhere(obj["data"])
+            if found:
+                return found
+        for k, v in obj.items():
+            # checa filhos primeiro
+            if isinstance(v, (dict, list)):
+                found = _find_email_anywhere(v)
+                if found:
+                    return found
+            # checa a própria chave
+            if "email" in str(k).lower() and isinstance(v, str) and EMAIL_RE.match(v):
+                return v
+    elif isinstance(obj, list):
+        for item in obj:
+            found = _find_email_anywhere(item)
+            if found:
+                return found
+    return None
+
 def _parse_email(payload: dict) -> str | None:
-    # tenta diversos formatos comuns
-    return (
+    # tenta campos comuns primeiro
+    email = (
         payload.get("email")
         or (payload.get("data") or {}).get("customer_email")
         or (payload.get("customer") or {}).get("email")
         or (payload.get("buyer") or {}).get("email")
         or (payload.get("user") or {}).get("email")
     )
+    if isinstance(email, str) and EMAIL_RE.match(email):
+        return email
+    # fallback: busca recursiva em qualquer lugar
+    return _find_email_anywhere(payload)
 
 def _parse_expires(payload: dict):
     # aceita ISO8601 ou timestamp, buscando em chaves comuns
@@ -146,7 +177,7 @@ async def kiwify_webhook(request: Request):
     except Exception:
         body = {}
 
-    # 🔎 log de diagnóstico para ver formato real do payload
+    # log de diagnóstico para enxergar o formato real do payload
     try:
         logger.info(f"[webhook] raw-keys={list(body.keys())} body={body}")
     except Exception:
@@ -182,8 +213,13 @@ async def kiwify_webhook(request: Request):
     if ALLOWED_EVENTS and event not in ALLOWED_EVENTS:
         return JSONResponse({"ok": True, "ignored": True, "event": event}, status_code=202)
 
+    # se o payload de teste não trouxer email, não falhe: responda 200 informativo
     if not email:
-        raise HTTPException(status_code=422, detail="email not found in payload")
+        logger.info("[webhook] sem e-mail no payload — retornando 200 (provável webhook de teste)")
+        return JSONResponse(
+            {"ok": True, "saved": False, "reason": "no email in payload", "event": event},
+            status_code=200,
+        )
 
     # status e expiração
     status = (
